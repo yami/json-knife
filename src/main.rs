@@ -33,11 +33,47 @@ enum ObjectSelector {
 }
 
 #[derive(Debug)]
+struct ArraySlice {
+    start: Option<i64>,
+    end: Option<i64>,
+    step: Option<i64>
+}
+
+impl ArraySlice {
+    pub fn new(start: Option<i64>, end: Option<i64>, step: Option<i64>) -> ArraySlice {
+        ArraySlice {
+            start: start,
+            end: end,
+            step: step,
+        }
+    }
+
+    pub fn to_range(&self, len: usize) -> std::ops::Range<usize> {
+        // TODO: handle negative
+        let start = match self.start {
+            Some(s) => s as usize,
+            None => 0,
+        };
+
+        let end = match self.end {
+            Some(e) => e as usize,
+            None => len,
+        };
+
+        let step = match self.step {
+            Some(s) => s as usize,
+            None => 1
+        };
+
+        // TODO: impl step
+        return std::ops::Range{start:start, end:end}
+    }
+}
+
+#[derive(Debug)]
 enum Op {
-    ArraySlice { start: Option<i64>,
-                 end: Option<i64>,
-                 step: Option<i64>
-    },
+    ArraySlice(ArraySlice),
+    ArrayIndex(i64),
 
     Object(ObjectSelector),
 
@@ -92,7 +128,8 @@ named!(parse_query<&[u8], Op>,
 
 named!(parse_query_array<&[u8], Op>,
        delimited!(char!('['),
-                  alt!(parse_query_slice_2 |
+                  alt!(parse_query_index |
+                       parse_query_slice_2 |
                        parse_query_slice_3),
                   char!(']')));
 
@@ -136,12 +173,16 @@ named!(parse_signed_i64<&[u8], i64>,
                   }
               } ));
 
+named!(parse_query_index<&[u8], Op>,
+       map_res!(parse_signed_i64,
+                |index :i64| -> Result<Op, Utf8Error> { return Ok(Op::ArrayIndex(index)) }));
+
 named!(parse_query_slice_2<&[u8], Op>,
        chain!(
            start: opt!(parse_signed_i64) ~
                char!(':') ~
            end: opt!(parse_signed_i64),
-           || { return Op::ArraySlice { start: start, end: end, step: None} }));
+           || { return Op::ArraySlice(ArraySlice::new(start, end, None))} ));
 
 named!(parse_query_slice_3<&[u8], Op>,
        chain!(
@@ -150,12 +191,15 @@ named!(parse_query_slice_3<&[u8], Op>,
            end: opt!(parse_signed_i64) ~
                   char!(':') ~
            step: opt!(parse_signed_i64),
-           || { return Op::ArraySlice{ start: start, end: end, step: step} } ));
+           || { return Op::ArraySlice(ArraySlice::new(start, end, step)) } ));
 
 fn select_json_array(v: Vec<Value>, query: &Op) -> Result<Value, JkError>
 {
-    println!("in select array: {:?}, Op: {:?}", v, query);
-    return Ok(v[0].clone());
+    match query {
+        &Op::ArraySlice(ref slice) => Ok(Value::Array(v[slice.to_range(v.len())].to_vec())),
+        &Op::ArrayIndex(index) => Ok(v[index as usize].clone()),
+        _ => Err(JkError::Query(String::from("bad array selector")))
+    }
 }
 
 fn select_json_object(o: Map<String, Value>, query: &Op) -> Result<Value, JkError>
@@ -166,22 +210,16 @@ fn select_json_object(o: Map<String, Value>, query: &Op) -> Result<Value, JkErro
             &ObjectSelector::Exact(ref key) => o.get(key).cloned().ok_or(JkError::Query(String::from("missing"))),
         }
     } else {
-        return Err(JkError::Query(String::from("bad selector")));
+        return Err(JkError::Query(String::from("bad object selector")));
     }
 }
 
 fn select_json_value(node: Value, query: &Op) -> Result<Value, JkError>
 {
     match node {
-        Value::Null => Ok(Value::Null),
-        Value::Bool(v) => Ok(Value::Bool(v)),
-        Value::I64(v) => Ok(Value::I64(v)),
-        Value::U64(v) => Ok(Value::U64(v)),
-        Value::F64(v) => Ok(Value::F64(v)),
-        Value::String(v) => Ok(Value::String(v)),
-        Value::Array(v) => select_json_array(v, query),
-        Value::Object(v) => select_json_object(v, query),
-        
+        Value::Array(vector) => select_json_array(vector, query),
+        Value::Object(object) => select_json_object(object, query),
+        value @ _ => Ok(value.clone()),
     }
 }
 
