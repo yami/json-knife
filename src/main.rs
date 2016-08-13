@@ -1,8 +1,7 @@
 #[macro_use]
 extern crate nom;
 
-#[macro_use]
-extern crate json;
+extern crate serde_json as json;
 
 use std::env;
 use std::io;
@@ -17,7 +16,8 @@ use std::str::FromStr;
 
 use nom::{digit};
 
-use json::JsonValue;
+use json::Value;
+use json::Map;
 
 #[derive(Debug)]
 enum JkError {
@@ -152,34 +152,36 @@ named!(parse_query_slice_3<&[u8], Op>,
            step: opt!(parse_signed_i64),
            || { return Op::ArraySlice{ start: start, end: end, step: step} } ));
 
-fn select_json_array(v: Vec<JsonValue>, query: &Op) -> Result<JsonValue, JkError>
+fn select_json_array(v: Vec<Value>, query: &Op) -> Result<Value, JkError>
 {
     println!("in select array: {:?}, Op: {:?}", v, query);
     return Ok(v[0].clone());
 }
 
-fn select_json_object(o: json::object::Object, query: &Op) -> Result<JsonValue, JkError>
+fn select_json_object(o: Map<String, Value>, query: &Op) -> Result<Value, JkError>
 {
     if let &Op::Object(ref selector) = query {
         match selector {
-            &ObjectSelector::Wildcard => Ok(JsonValue::Object(o)),
-            &ObjectSelector::Exact(ref key) => o.get(&key).cloned().ok_or(JkError::Query(String::from("missing"))),
+            &ObjectSelector::Wildcard => Ok(Value::Object(o)),
+            &ObjectSelector::Exact(ref key) => o.get(key).cloned().ok_or(JkError::Query(String::from("missing"))),
         }
     } else {
         return Err(JkError::Query(String::from("bad selector")));
     }
 }
 
-fn select_json_value(node: JsonValue, query: &Op) -> Result<JsonValue, JkError>
+fn select_json_value(node: Value, query: &Op) -> Result<Value, JkError>
 {
     match node {
-        JsonValue::Null => Ok(JsonValue::Null),
-        JsonValue::Short(s) => Ok(JsonValue::Null),
-        JsonValue::String(s) => Ok(JsonValue::Null),
-        JsonValue::Number(n) => Ok(JsonValue::Null),
-        JsonValue::Boolean(b) => Ok(JsonValue::Null),
-        JsonValue::Object(o) => select_json_object(o, query),
-        JsonValue::Array(v) => select_json_array(v, query),
+        Value::Null => Ok(Value::Null),
+        Value::Bool(v) => Ok(Value::Bool(v)),
+        Value::I64(v) => Ok(Value::I64(v)),
+        Value::U64(v) => Ok(Value::U64(v)),
+        Value::F64(v) => Ok(Value::F64(v)),
+        Value::String(v) => Ok(Value::String(v)),
+        Value::Array(v) => select_json_array(v, query),
+        Value::Object(v) => select_json_object(v, query),
+        
     }
 }
 
@@ -192,7 +194,7 @@ fn execute<R: io::Read>(script: &Script, reader: &mut R) -> Result<(), JkError>
 
     try!(reader.read_to_string(&mut input).map_err(JkError::Io));
 
-    let json_root = try!(json::parse(&input).map_err(JkError::Parse));
+    let json_root: Value = try!(json::from_str(&input).map_err(JkError::Parse));
     let mut json_curr = json_root;
     
     for s in selector {
