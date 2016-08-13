@@ -1,0 +1,8 @@
+[package]
+name = "json-knife"
+version = "0.1.0"
+authors = ["yami <yamisoe@gmail.com>"]
+
+[dependencies]
+nom = "^1.2.3"
+json = "^0.10.0"
