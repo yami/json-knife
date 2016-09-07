@@ -210,9 +210,7 @@ fn execute<R: io::Read>(script: &Script, reader: &mut R) -> Result<(), JkError>
     let mut input = String::new();
 
     try!(reader.read_to_string(&mut input).map_err(JkError::Io));
-
-    println!("input: {:?}", input);
-
+    
     let json_root: Value = try!(json::from_str(&input).map_err(JkError::Parse));
     let mut json_curr = json_root;
 
