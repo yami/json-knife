@@ -4,5 +4,4 @@ version = "0.1.0"
 authors = ["yami <yamisoe@gmail.com>"]
 
 [dependencies]
-nom = "^1.2.3"
 serde_json = "0.8"

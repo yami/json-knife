@@ -1,0 +1,77 @@
+use script::*;
+
+#[pub]
+script -> Script
+       = s:selector_section separator r:recorder_section { Script {selector:s, action:r} }
+
+// Common tokens
+
+ws = [ \t]*
+
+ident -> String
+      = [a-zA-Z0-9_#/\-]+ { match_str.to_string() }
+      
+s_string -> String
+         = "'" s:s_char* "'" { s.into_iter().collect() }
+         
+d_string -> String
+         = "\"" s:d_char* "\"" { s.into_iter().collect() }
+
+s_char -> char
+       = !"'" { match_str.chars().next().unwrap() }
+
+d_char -> char
+       = !"\"" { match_str.chars().next().unwrap() }
+
+int -> i64
+    = "0" { 0 + 0 } / [1-9][0-9]* { match_str.parse().unwrap() }
+
+
+
+sint -> i64
+    = "-" v:int { -v } /
+      int
+
+
+object_index -> String
+             = ident / s_string / d_string
+
+
+l_square = ws "[" ws
+r_square = ws "]" ws
+colon = ws ":" ws
+
+separator = ws "@" ws
+
+selector_section -> Vec<Jop>
+                 = selector ** "."
+
+selector -> Jop
+         = array_selector / object_selector
+
+array_selector -> Jop
+               = array_index_selector / array_slice_selector
+
+array_index_selector -> Jop
+    = l_square index:sint r_square { Jop::ArrayIndex(index) }
+    
+array_slice_selector -> Jop
+    = l_square start:sint? colon end:sint? r_square { Jop::ArraySlice(ArraySlice::new(start, end, None)) }
+
+object_selector -> Jop
+                = wildcard_object_selector / member_object_selector
+
+wildcard_object_selector -> Jop
+    = "*" { Jop::Object(ObjectSelector::Wildcard) }
+
+member_object_selector -> Jop
+    = object_index { Jop::Object(ObjectSelector::Exact(match_str.to_string())) }
+
+recorder_section -> Vec<Rop>
+                 = recorder ** ws
+
+recorder -> Rop
+         = object_recorder
+
+object_recorder -> Rop
+    = "." index:object_index { Rop::Index(index) }

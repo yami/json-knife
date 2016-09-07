@@ -1,12 +1,13 @@
-#[macro_use]
-extern crate nom;
-
 extern crate serde_json as json;
 
 use std::env;
 use std::io;
 
-use std::fs::File;
+mod script;
+mod parse;
+
+use parse::script;
+use script::*;
 
 // selector convert a json value to another json value
 // action prints records in a json value in tabluar form
@@ -42,9 +43,6 @@ use std::fs::File;
 use std::string::String;
 use std::str::Utf8Error;
 use std::str;
-use std::str::FromStr;
-
-use nom::{digit, multispace};
 
 use json::Value;
 use json::Map;
@@ -62,78 +60,6 @@ fn action_error(msg: &str) -> Result<(), JkError>
     return Err(JkError::Action(String::from(msg)));
 }
 
-#[derive(Debug)]
-enum ObjectSelector {
-    Wildcard,
-    Exact(String),
-}
-
-#[derive(Debug)]
-struct ArraySlice {
-    start: Option<i64>,
-    end: Option<i64>,
-    step: Option<i64>
-}
-
-impl ArraySlice {
-    pub fn new(start: Option<i64>, end: Option<i64>, step: Option<i64>) -> ArraySlice {
-        ArraySlice {
-            start: start,
-            end: end,
-            step: step,
-        }
-    }
-
-    pub fn to_range(&self, len: usize) -> std::ops::Range<usize> {
-        // TODO: handle negative
-        let start = match self.start {
-            Some(s) => s as usize,
-            None => 0,
-        };
-
-        let end = match self.end {
-            Some(e) => e as usize,
-            None => len,
-        };
-
-        let step = match self.step {
-            Some(s) => s as usize,
-            None => 1
-        };
-
-        // TODO: impl step
-        return std::ops::Range{start:start, end:end}
-    }
-}
-
-#[derive(Debug)]
-struct Function {
-    name: String,
-    args: Vec<String>,
-}
-
-#[derive(Debug)]
-enum Jop {
-    ArraySlice(ArraySlice),
-    ArrayIndex(i64),
-
-    Object(ObjectSelector),
-
-    Default(String)
-}
-
-#[derive(Debug)]
-enum Rop {
-    Plain(String),
-    Index(String),
-    Function(Function),
-}
-
-#[derive(Debug)]
-struct Script {
-    selector: Vec<Jop>,
-    action: Vec<Rop>
-}
 
 
 fn array_to_op_string(from: &[u8]) -> Result<Jop, Utf8Error>
@@ -152,47 +78,6 @@ fn array_to_string(from: &[u8]) -> Result<String, Utf8Error>
     }
 }
 
-named!(parse<&[u8], Script>,
-      chain!(
-          selector: parse_selector ~
-                    opt!(multispace) ~
-                    tag!("@") ~
-                    opt!(multispace) ~
-          action:   parse_action,
-          || { return Script {selector: selector, action: action} }
-      )
-);
-
-named!(parse_record_selector<&[u8], Rop>,
-       chain!(
-           tag!(".") ~
-               index: map_res!(is_not!(". "), array_to_string),
-           || { return Rop::Index(index) } ));
-
-named!(parse_action<&[u8], Vec<Rop> >,
-       separated_list!(multispace, parse_record_selector));
-
-
-named!(parse_selector<&[u8], Vec<Jop> >,
-       separated_list!(tag!("."), parse_query));
-
-
-named!(parse_query<&[u8], Jop>,
-       alt!(parse_query_array |
-            parse_query_object));
-
-named!(parse_query_array<&[u8], Jop>,
-       delimited!(char!('['),
-                  alt!(parse_query_index |
-                       parse_query_slice_2 |
-                       parse_query_slice_3),
-                  char!(']')));
-
-
-named!(parse_query_object<&[u8], Jop>,
-       alt!(
-           tag!("*") => { |_| Jop::Object(ObjectSelector::Wildcard) }
-           | map_res!(is_not!(".{}[]*"), array_to_string) =>  { |s: String| Jop::Object(ObjectSelector::Exact(s)) })); 
 
 fn array_to_sign_value(from: &[u8]) -> Result<i64, JkError>
 {
@@ -202,51 +87,6 @@ fn array_to_sign_value(from: &[u8]) -> Result<i64, JkError>
         _ => Err(JkError::Query(String::from("hello")))
     }
 }
-
-named!(parse_sign<&[u8], i64>,
-       map_res!(alt!(tag!("+") | tag!("-")), array_to_sign_value));
-
-named!(parse_i64<i64>,
-  map_res!(
-    map_res!(
-      digit,
-      str::from_utf8
-    ),
-    FromStr::from_str
-  )
-);
-       
-named!(parse_signed_i64<&[u8], i64>,
-       chain!(sign: opt!(parse_sign) ~
-              value: parse_i64,
-              ||
-              {
-                  if let Some(s) = sign {
-                      return s * value;
-                  } else {
-                      return value;
-                  }
-              } ));
-
-named!(parse_query_index<&[u8], Jop>,
-       map_res!(parse_signed_i64,
-                |index :i64| -> Result<Jop, Utf8Error> { return Ok(Jop::ArrayIndex(index)) }));
-
-named!(parse_query_slice_2<&[u8], Jop>,
-       chain!(
-           start: opt!(parse_signed_i64) ~
-               char!(':') ~
-           end: opt!(parse_signed_i64),
-           || { return Jop::ArraySlice(ArraySlice::new(start, end, None))} ));
-
-named!(parse_query_slice_3<&[u8], Jop>,
-       chain!(
-           start: opt!(parse_signed_i64) ~
-                  char!(':') ~
-           end: opt!(parse_signed_i64) ~
-                  char!(':') ~
-           step: opt!(parse_signed_i64),
-           || { return Jop::ArraySlice(ArraySlice::new(start, end, step)) } ));
 
 fn select_json_array(v: Vec<Value>, query: &Jop) -> Result<Value, JkError>
 {
@@ -282,13 +122,13 @@ fn run_array_action(v: &Vec<Value>, rop: &Rop) -> Result<(), JkError>
 {
     match rop {
         &Rop::Plain(ref p) => {
-            println!("{} ", p);
+            print!("{} ", p);
             return Ok(());
         },
         
         &Rop::Index(ref i) => {
             if let Ok(index) = i.parse::<usize>() {
-                println!("{} ", v[index]);
+                print!("{} ", v[index]);
                 return Ok(());
             } else {
                 return action_error("run_array_action fail to parse index as usize");
@@ -307,13 +147,13 @@ fn run_object_action(object: &Map<String, Value>, rop: &Rop) -> Result<(), JkErr
 {
     match rop {
         &Rop::Plain(ref p) => {
-            println!("{} ", p);
+            print!("{} ", p);
             return Ok(());
         },
 
         &Rop::Index(ref i) => {
             if let Some(value) = object.get(i) {
-                println!("{} ", value);
+                print!("{} ", value);
                 return Ok(());
             } else {
                 return action_error("run_object_action fail to parse index as usize");
@@ -330,7 +170,7 @@ fn run_single_action(value: &Value, rop: &Rop) -> Result<(), JkError>
 {
     match rop {
         &Rop::Plain(ref p) => {
-            println!("{} ", p);
+            print!("{} ", p);
             return Ok(());
         },
 
@@ -371,9 +211,11 @@ fn execute<R: io::Read>(script: &Script, reader: &mut R) -> Result<(), JkError>
 
     try!(reader.read_to_string(&mut input).map_err(JkError::Io));
 
+    println!("input: {:?}", input);
+
     let json_root: Value = try!(json::from_str(&input).map_err(JkError::Parse));
     let mut json_curr = json_root;
-    
+
     for s in selector {
         let json_next = try!(select_json_value(json_curr, s));
         json_curr = json_next;
@@ -386,9 +228,9 @@ fn execute<R: io::Read>(script: &Script, reader: &mut R) -> Result<(), JkError>
 
 fn main() {
     if let Some(program) = env::args().nth(1) {
-        match parse(program.as_bytes()) {
-            nom::IResult::Done(i, s) => { execute(&s, &mut io::stdin()); },
-            others @ _ => println!("parse error, program={} error={:?}", program, others),
+        match script(&program) {
+            Ok(s) => { execute(&s, &mut io::stdin()).unwrap(); },
+            Err(e) => println!("parse error, program={} error={:?}", program, e),
         }
     } else {
         println!("at least one argument must be supplied");
