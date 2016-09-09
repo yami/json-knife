@@ -1,4 +1,14 @@
+extern crate serde_json as json;
+
+use json::Value;
+use json::Map;
+
+
 use std;
+use std::io;
+use std::collections::BTreeMap;
+use std::fmt;
+
 
 #[derive(Debug)]
 pub enum ObjectSelector {
@@ -40,9 +50,16 @@ impl ArraySlice {
 }
 
 #[derive(Debug)]
+pub enum ActionExpr {
+    Integer(i64),
+    String(String),
+    ObjectIndex(String),
+}
+
+#[derive(Debug)]
 pub struct Function {
-    name: String,
-    args: Vec<String>,
+    pub name: String,
+    pub args: Vec<ActionExpr>,
 }
 
 #[derive(Debug)]
@@ -55,15 +72,51 @@ pub enum Jop {
     Default(String)
 }
 
-#[derive(Debug)]
-pub enum Rop {
-    Plain(String),
-    Index(String),
-    Function(Function),
-}
 
 #[derive(Debug)]
 pub struct Script {
     pub selector: Vec<Jop>,
-    pub action: Vec<Rop>
+    pub action: Vec<Function>
+}
+
+
+#[derive(Debug)]
+pub enum JkError {
+    Io(io::Error),
+    Parse(json::Error),
+    Query(String),
+    Action(String),
+}
+
+
+// function prototypes
+pub struct FunctionPrototype {
+    pub func: fn (&Vec<Value>) -> Result<Value, JkError>,
+}
+
+impl fmt::Debug for FunctionPrototype {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "FunctionPrototype")
+    }
+}
+
+fn builtin_print(args: &Vec<Value>) -> Result<Value, JkError>
+{
+    for a in args {
+        print!("{} ", a);
+    }
+
+    print!("\n");
+    
+    return Ok(Value::Null);
+}
+
+
+pub fn make_builtin_funcs() -> BTreeMap<String, FunctionPrototype>
+{
+    let mut m = BTreeMap::new();
+
+    m.insert(String::from("p"), FunctionPrototype { func: builtin_print });
+
+    return m;
 }

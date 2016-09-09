@@ -1,7 +1,11 @@
 extern crate serde_json as json;
 
+#[macro_use]
+extern crate lazy_static;
+
 use std::env;
 use std::io;
+use std::collections::BTreeMap;
 
 mod script;
 mod parse;
@@ -47,13 +51,11 @@ use std::str;
 use json::Value;
 use json::Map;
 
-#[derive(Debug)]
-enum JkError {
-    Io(io::Error),
-    Parse(json::Error),
-    Query(String),
-    Action(String),
+
+lazy_static! {
+    static ref sBuiltins: BTreeMap<String, FunctionPrototype> = script::make_builtin_funcs();
 }
+
 
 fn action_error(msg: &str) -> Result<(), JkError>
 {
@@ -61,6 +63,10 @@ fn action_error(msg: &str) -> Result<(), JkError>
 }
 
 
+fn value_error(msg: &str) -> Result<Value, JkError>
+{
+    return Err(JkError::Action(String::from(msg)));
+}
 
 fn array_to_op_string(from: &[u8]) -> Result<Jop, Utf8Error>
 {
@@ -118,88 +124,77 @@ fn select_json_value(node: Value, query: &Jop) -> Result<Value, JkError>
     }
 }
 
-fn run_array_action(v: &Vec<Value>, rop: &Rop) -> Result<(), JkError>
+fn run_array_action(values: &Vec<Value>, action: &Vec<Function>) -> Result<(), JkError>
 {
-    match rop {
-        &Rop::Plain(ref p) => {
-            print!("{} ", p);
-            return Ok(());
-        },
-        
-        &Rop::Index(ref i) => {
-            if let Ok(index) = i.parse::<usize>() {
-                print!("{} ", v[index]);
-                return Ok(());
-            } else {
-                return action_error("run_array_action fail to parse index as usize");
-            }
-        },
-        
-        &Rop::Function(ref f) => {
-            return action_error("run_array_action function not supported");
-        },
-    }
-
-    return action_error("unknown rop");
-}
-
-fn run_object_action(object: &Map<String, Value>, rop: &Rop) -> Result<(), JkError>
-{
-    match rop {
-        &Rop::Plain(ref p) => {
-            print!("{} ", p);
-            return Ok(());
-        },
-
-        &Rop::Index(ref i) => {
-            if let Some(value) = object.get(i) {
-                print!("{} ", value);
-                return Ok(());
-            } else {
-                return action_error("run_object_action fail to parse index as usize");
-            }
-        },
-
-        &Rop::Function(ref f) => {
-            return action_error("run_object_action function not supported");
-        },
-    }
-}
-
-fn run_single_action(value: &Value, rop: &Rop) -> Result<(), JkError>
-{
-    match rop {
-        &Rop::Plain(ref p) => {
-            print!("{} ", p);
-            return Ok(());
-        },
-
-        &Rop::Index(ref i) => {
-            return action_error("run_object_action index not supported");
-        },
-        
-        &Rop::Function(ref f) => {
-            return action_error("run_single_action function not supported");
-        },
-
-    }
-}
-
-fn run_action(value: &Value, action: &Vec<Rop>) -> Result<(), JkError>
-{
-    for rop in action {
-        let result = match value {
-            &Value::Array(ref vector) => run_array_action(vector, rop),
-            &Value::Object(ref object) => run_object_action(object, rop),
-            _ => run_single_action(value, rop),
-        };
-
-        if result.is_err() {
-            return result;
+    for ref v in values {
+        for func in action {
+            run_function(v, func);
         }
     }
 
     return Ok(());
+}
+
+fn evaluate_object_index(v: &Value, index: &String) -> Result<Value, JkError>
+{
+    if let &Value::Object(ref obj) = v {
+        if let Some(evalue) = obj.get(index) {
+            return Ok(evalue.clone());
+        } else {
+            return value_error("not found in object");
+        }
+    } else {
+        return value_error("not an object");
+    }
+}
+
+fn evaluate(v: &Value, e: &ActionExpr) -> Result<Value, JkError>
+{
+    match e {
+        &ActionExpr::Integer(i) => Ok(Value::I64(i)),
+        &ActionExpr::String(ref s) => Ok(Value::String(s.clone())),
+        &ActionExpr::ObjectIndex(ref idx) => evaluate_object_index(v, idx),
+    }
+}
+
+fn batch_evaluate(v: &Value, expressions: &Vec<ActionExpr>) -> Result<Vec<Value>, JkError>
+{
+    let mut evector = Vec::new();
+    
+    for e in expressions {
+        evector.push(try!(evaluate(v, e)));
+    }
+
+    return Ok(evector);
+}
+
+fn run_function(v: &Value, func: &Function) -> Result<(), JkError>
+{
+    if let Some(ref proto) = sBuiltins.get(&func.name) {
+        let args = try!(batch_evaluate(v, &func.args));
+        try!((proto.func)(&args));
+        return Ok(());
+    } else {
+        return action_error("function not found");
+    }
+}
+
+
+fn run_single_action(v: &Value, action: &Vec<Function>) -> Result<(), JkError>
+{
+    for func in action {
+        try!(run_function(v, func));
+    }
+
+    return Ok(());
+}
+
+fn run_action(value: &Value, action: &Vec<Function>) -> Result<(), JkError>
+{
+    match value {
+        &Value::Array(ref vector) => run_array_action(vector, action),
+        _ => run_single_action(value, action),
+    }
 }
 
 fn execute<R: io::Read>(script: &Script, reader: &mut R) -> Result<(), JkError>

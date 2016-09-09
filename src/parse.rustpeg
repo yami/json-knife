@@ -2,9 +2,11 @@ use script::*;
 
 #[pub]
 script -> Script
-       = s:selector_section separator r:recorder_section { Script {selector:s, action:r} }
+       = s:selector_section section_separator a:action_section { Script {selector:s, action:a} }
 
 // Common tokens
+
+space_separator = [ \t]+
 
 ws = [ \t]*
 
@@ -26,22 +28,33 @@ d_char -> char
 int -> i64
     = "0" { 0 + 0 } / [1-9][0-9]* { match_str.parse().unwrap() }
 
+indexer = "."
+
 
 
 sint -> i64
     = "-" v:int { -v } /
       int
 
+action_literal -> ActionExpr
+               = i:int { ActionExpr::Integer(i) } /
+                 s:s_string { ActionExpr::String(s) } /
+                 d:d_string { ActionExpr::String(d) }
 
-object_index -> String
+action_object_index -> ActionExpr
+                    = indexer n:object_index_name { ActionExpr::ObjectIndex(n) }
+
+object_index_name -> String
              = ident / s_string / d_string
+
 
 
 l_square = ws "[" ws
 r_square = ws "]" ws
 colon = ws ":" ws
 
-separator = ws "@" ws
+section_separator = ws "@" ws
+action_separator = ws ";" ws
 
 selector_section -> Vec<Jop>
                  = selector ** "."
@@ -65,13 +78,16 @@ wildcard_object_selector -> Jop
     = "*" { Jop::Object(ObjectSelector::Wildcard) }
 
 member_object_selector -> Jop
-    = object_index { Jop::Object(ObjectSelector::Exact(match_str.to_string())) }
+    = object_index_name { Jop::Object(ObjectSelector::Exact(match_str.to_string())) }
 
-recorder_section -> Vec<Rop>
-                 = recorder ** ws
+action_section -> Vec<Function>
+                 = action_func ** action_separator
 
-recorder -> Rop
-         = object_recorder
+action_func -> Function
+    = n:ident space_separator p:action_expr_list { Function {name: n, args: p} }
 
-object_recorder -> Rop
-    = "." index:object_index { Rop::Index(index) }
+action_expr_list -> Vec<ActionExpr>
+                = action_expr ** space_separator
+
+action_expr -> ActionExpr
+            = action_literal / action_object_index
