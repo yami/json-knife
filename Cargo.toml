@@ -1,5 +1,5 @@
 [package]
-name = "json-knife"
+name = "jk"
 version = "0.1.0"
 authors = ["yami <yamisoe@gmail.com>"]
 

@@ -101,9 +101,11 @@ fn select_json_value(node: Value, query: &Jop) -> Result<Value, JkError>
 fn run_array_action(runtime: &mut Runtime, values: &Vec<Value>, action: &Vec<Function>) -> Result<(), JkError>
 {
     let var_key = &String::from("_k");
-    
-    for (i, ref v) in values.iter().enumerate() {
+    let var_value = &String::from("_v");
+
+    for (i, v) in values.iter().enumerate() {
         runtime.var_set(var_key, Value::I64(i as i64));
+        runtime.var_set(var_value, v.clone());
         
         for func in action {
             try!(run_function(runtime, v, func));
@@ -111,6 +113,7 @@ fn run_array_action(runtime: &mut Runtime, values: &Vec<Value>, action: &Vec<Fun
     }
 
     runtime.var_delete(var_key);
+    runtime.var_delete(var_value);
 
     return Ok(());
 }
@@ -118,9 +121,11 @@ fn run_array_action(runtime: &mut Runtime, values: &Vec<Value>, action: &Vec<Fun
 fn run_object_action(runtime: &mut Runtime, object: &Map<String, Value>, action:&Vec<Function>) -> Result<(), JkError>
 {
     let var_key = &String::from("_k");
+    let var_value = &String::from("_v");
 
     for (key, value) in object {
         runtime.var_set(var_key, Value::String(key.clone()));
+        runtime.var_set(var_value, value.clone());
 
         for func in action {
             try!(run_function(runtime, value, func));
@@ -128,6 +133,7 @@ fn run_object_action(runtime: &mut Runtime, object: &Map<String, Value>, action:
     }
 
     runtime.var_delete(var_key);
+    runtime.var_delete(var_value);
 
     return Ok(());
 }
