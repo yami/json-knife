@@ -123,10 +123,9 @@ fn parse_script<'input>(input: &'input str, state: &mut ParseState<'input>,
             match seq_res {
                 Matched(pos, s) => {
                     {
-                        let seq_res =
-                            parse_section_separator(input, state, pos);
+                        let seq_res = parse_mode_separator(input, state, pos);
                         match seq_res {
-                            Matched(pos, _) => {
+                            Matched(pos, m) => {
                                 {
                                     let seq_res =
                                         parse_action_section(input, state,
@@ -140,6 +139,7 @@ fn parse_script<'input>(input: &'input str, state: &mut ParseState<'input>,
                                                         {
                                                             Script{selector:
                                                                        s,
+                                                                   mode: m,
                                                                    action: a,}
                                                         })
                                             }
@@ -751,22 +751,87 @@ fn parse_colon<'input>(input: &'input str, state: &mut ParseState<'input>,
         }
     }
 }
-fn parse_section_separator<'input>(input: &'input str,
-                                   state: &mut ParseState<'input>, pos: usize)
- -> RuleResult<()> {
+fn parse_mode_separator<'input>(input: &'input str,
+                                state: &mut ParseState<'input>, pos: usize)
+ -> RuleResult<ActionMode> {
     {
-        let seq_res = parse_ws(input, state, pos);
-        match seq_res {
-            Matched(pos, _) => {
+        let choice_res =
+            {
+                let start_pos = pos;
                 {
-                    let seq_res = slice_eq(input, state, pos, "@");
+                    let seq_res = parse_ws(input, state, pos);
                     match seq_res {
-                        Matched(pos, _) => { parse_ws(input, state, pos) }
+                        Matched(pos, _) => {
+                            {
+                                let seq_res =
+                                    slice_eq(input, state, pos, "@");
+                                match seq_res {
+                                    Matched(pos, _) => {
+                                        {
+                                            let seq_res =
+                                                parse_ws(input, state, pos);
+                                            match seq_res {
+                                                Matched(pos, _) => {
+                                                    {
+                                                        let match_str =
+                                                            &input[start_pos..pos];
+                                                        Matched(pos,
+                                                                {
+                                                                    ActionMode::ForSelf
+                                                                })
+                                                    }
+                                                }
+                                                Failed => Failed,
+                                            }
+                                        }
+                                    }
+                                    Failed => Failed,
+                                }
+                            }
+                        }
+                        Failed => Failed,
+                    }
+                }
+            };
+        match choice_res {
+            Matched(pos, value) => Matched(pos, value),
+            Failed => {
+                let start_pos = pos;
+                {
+                    let seq_res = parse_ws(input, state, pos);
+                    match seq_res {
+                        Matched(pos, _) => {
+                            {
+                                let seq_res =
+                                    slice_eq(input, state, pos, "%");
+                                match seq_res {
+                                    Matched(pos, _) => {
+                                        {
+                                            let seq_res =
+                                                parse_ws(input, state, pos);
+                                            match seq_res {
+                                                Matched(pos, _) => {
+                                                    {
+                                                        let match_str =
+                                                            &input[start_pos..pos];
+                                                        Matched(pos,
+                                                                {
+                                                                    ActionMode::ForEach
+                                                                })
+                                                    }
+                                                }
+                                                Failed => Failed,
+                                            }
+                                        }
+                                    }
+                                    Failed => Failed,
+                                }
+                            }
+                        }
                         Failed => Failed,
                     }
                 }
             }
-            Failed => Failed,
         }
     }
 }

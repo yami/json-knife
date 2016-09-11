@@ -2,7 +2,7 @@ use script::*;
 
 #[pub]
 script -> Script
-       = s:selector_section section_separator a:action_section { Script {selector:s, action:a} }
+       = s:selector_section m:mode_separator a:action_section { Script {selector:s, mode:m, action:a} }
 
 // Common tokens
 
@@ -54,7 +54,10 @@ l_square = ws "[" ws
 r_square = ws "]" ws
 colon = ws ":" ws
 
-section_separator = ws "@" ws
+mode_separator -> ActionMode
+               = ws "@" ws { ActionMode::ForSelf } /
+                 ws "%" ws { ActionMode::ForEach }
+
 action_separator = ws ";" ws
 
 selector_section -> Vec<Jop>

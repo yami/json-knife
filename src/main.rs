@@ -46,7 +46,6 @@ use script::*;
 //
 
 use std::string::String;
-use std::str::Utf8Error;
 use std::str;
 
 use json::Value;
@@ -54,7 +53,7 @@ use json::Map;
 
 
 lazy_static! {
-    static ref sBuiltins: BTreeMap<String, FunctionPrototype> = script::make_builtin_funcs();
+    static ref BUILTIN_FUNCS: BTreeMap<String, FunctionPrototype> = script::make_builtin_funcs();
 }
 
 
@@ -67,32 +66,6 @@ fn action_error(msg: &str) -> Result<(), JkError>
 fn value_error(msg: &str) -> Result<Value, JkError>
 {
     return Err(JkError::Action(String::from(msg)));
-}
-
-fn array_to_op_string(from: &[u8]) -> Result<Jop, Utf8Error>
-{
-    match str::from_utf8(from) {
-        Ok(value) => Ok(Jop::Default(String::from(value))),
-        Err(e) => Err(e)
-    }
-}
-
-fn array_to_string(from: &[u8]) -> Result<String, Utf8Error>
-{
-    match str::from_utf8(from) {
-        Ok(value) => Ok(String::from(value)),
-        Err(e) => Err(e)
-    }
-}
-
-
-fn array_to_sign_value(from: &[u8]) -> Result<i64, JkError>
-{
-    match from[0] as char {
-        '+' => Ok(1),
-        '-' => Ok(-1),
-        _ => Err(JkError::Query(String::from("hello")))
-    }
 }
 
 fn select_json_array(v: Vec<Value>, query: &Jop) -> Result<Value, JkError>
@@ -133,7 +106,7 @@ fn run_array_action(runtime: &mut Runtime, values: &Vec<Value>, action: &Vec<Fun
         runtime.var_set(var_key, Value::I64(i as i64));
         
         for func in action {
-            run_function(runtime, v, func);
+            try!(run_function(runtime, v, func));
         }
     }
 
@@ -150,7 +123,7 @@ fn run_object_action(runtime: &mut Runtime, object: &Map<String, Value>, action:
         runtime.var_set(var_key, Value::String(key.clone()));
 
         for func in action {
-            run_function(runtime, value, func);
+            try!(run_function(runtime, value, func));
         }
     }
 
@@ -195,7 +168,7 @@ fn batch_evaluate(runtime: &Runtime, v: &Value, expressions: &Vec<ActionExpr>) -
 
 fn run_function(runtime: &mut Runtime, v: &Value, func: &Function) -> Result<(), JkError>
 {
-    if let Some(ref proto) = sBuiltins.get(&func.name) {
+    if let Some(ref proto) = BUILTIN_FUNCS.get(&func.name) {
         let args = try!(batch_evaluate(runtime, v, &func.args));
         try!((proto.func)(&args));
         return Ok(());
@@ -214,7 +187,7 @@ fn run_single_action(runtime: &mut Runtime, v: &Value, action: &Vec<Function>) -
     return Ok(());
 }
 
-fn run_action(value: &Value, action: &Vec<Function>) -> Result<(), JkError>
+fn run_foreach_action(value: &Value, action: &Vec<Function>) -> Result<(), JkError>
 {
     let runtime = &mut Runtime::new();
     
@@ -223,6 +196,12 @@ fn run_action(value: &Value, action: &Vec<Function>) -> Result<(), JkError>
         &Value::Object(ref object) => run_object_action(runtime, object, action),
         _ => run_single_action(runtime, value, action),
     }
+}
+
+fn run_forself_action(value: &Value, action: &Vec<Function>) -> Result<(), JkError>
+{
+    let runtime = &mut Runtime::new();
+    return run_single_action(runtime, value, action);
 }
 
 fn execute<R: io::Read>(script: &Script, reader: &mut R) -> Result<(), JkError>
@@ -242,9 +221,10 @@ fn execute<R: io::Read>(script: &Script, reader: &mut R) -> Result<(), JkError>
         json_curr = json_next;
     }
 
-    println!("result: {:?}", json_curr);
-
-    return run_action(&json_curr, action);
+    match script.mode {
+        ActionMode::ForEach => return run_foreach_action(&json_curr, action),
+        ActionMode::ForSelf => return run_forself_action(&json_curr, action),
+    }
 }
 
 fn main() {

@@ -1,14 +1,11 @@
 extern crate serde_json as json;
 
-use json::Value;
-use json::Map;
-
-
 use std;
 use std::io;
 use std::collections::BTreeMap;
 use std::fmt;
 
+use json::Value;
 
 #[derive(Debug)]
 pub enum ObjectSelector {
@@ -67,17 +64,20 @@ pub struct Function {
 pub enum Jop {
     ArraySlice(ArraySlice),
     ArrayIndex(i64),
-
     Object(ObjectSelector),
-
-    Default(String)
 }
 
+#[derive(Debug)]
+pub enum ActionMode {
+    ForSelf,
+    ForEach,
+}
 
 #[derive(Debug)]
 pub struct Script {
     pub selector: Vec<Jop>,
-    pub action: Vec<Function>
+    pub mode: ActionMode,
+    pub action: Vec<Function>,
 }
 
 
