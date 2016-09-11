@@ -1,4 +1,6 @@
 # jk - Json Knife
+
+
 ## Development Stage
 This project is in its very early stage, a couple of things missing or unstable are
   1. no pretty printing yet
@@ -6,8 +8,11 @@ This project is in its very early stage, a couple of things missing or unstable 
   3. query syntax is unstable
   4. action syntax is unstable
   5. and more...
+
+
 ## What is it?
 Jk is a tool to transform Json data to tabular form, inspired by [Micha](https://github.com/micha)'s [json-table](https://github.com/micha/json-table), [jsawk](https://github.com/micha/jsawk) and Goessner's [JsonPath](http://goessner.net/articles/JsonPath/). While Jk's goal is same as json-table's, jk tries to be more intuitive and powerful than json-table. The main difference is that jk adopts a similar form of awk, which makes generating tabular output easier.
+
 
 ## How to use?
 A jk program consists of three parts:
@@ -85,3 +90,6 @@ To print the bicyle color:
 $ cat store.json | jk "store.bicycle @ p .color"
 red
 ```
+
+## License
+MIT
