@@ -11,7 +11,7 @@ space_separator = [ \t]+
 ws = [ \t]*
 
 ident -> String
-      = [a-zA-Z0-9_#/\-]+ { match_str.to_string() }
+      = [a-zA-Z_][a-zA-Z0-9_\-]* { match_str.to_string() }
       
 s_string -> String
          = "'" s:s_char* "'" { s.into_iter().collect() }
@@ -39,7 +39,8 @@ sint -> i64
 action_literal -> ActionExpr
                = i:int { ActionExpr::Integer(i) } /
                  s:s_string { ActionExpr::String(s) } /
-                 d:d_string { ActionExpr::String(d) }
+                 d:d_string { ActionExpr::String(d) } /
+                 v:ident { ActionExpr::Variable(v) }
 
 action_object_index -> ActionExpr
                     = indexer n:object_index_name { ActionExpr::ObjectIndex(n) }

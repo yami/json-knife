@@ -6,6 +6,7 @@ extern crate lazy_static;
 use std::env;
 use std::io;
 use std::collections::BTreeMap;
+use std::iter::Iterator;
 
 mod script;
 mod parse;
@@ -124,13 +125,36 @@ fn select_json_value(node: Value, query: &Jop) -> Result<Value, JkError>
     }
 }
 
-fn run_array_action(values: &Vec<Value>, action: &Vec<Function>) -> Result<(), JkError>
+fn run_array_action(runtime: &mut Runtime, values: &Vec<Value>, action: &Vec<Function>) -> Result<(), JkError>
 {
-    for ref v in values {
+    let var_key = &String::from("_k");
+    
+    for (i, ref v) in values.iter().enumerate() {
+        runtime.var_set(var_key, Value::I64(i as i64));
+        
         for func in action {
-            run_function(v, func);
+            run_function(runtime, v, func);
         }
     }
+
+    runtime.var_delete(var_key);
+
+    return Ok(());
+}
+
+fn run_object_action(runtime: &mut Runtime, object: &Map<String, Value>, action:&Vec<Function>) -> Result<(), JkError>
+{
+    let var_key = &String::from("_k");
+
+    for (key, value) in object {
+        runtime.var_set(var_key, Value::String(key.clone()));
+
+        for func in action {
+            run_function(runtime, value, func);
+        }
+    }
+
+    runtime.var_delete(var_key);
 
     return Ok(());
 }
@@ -148,30 +172,31 @@ fn evaluate_object_index(v: &Value, index: &String) -> Result<Value, JkError>
     }
 }
 
-fn evaluate(v: &Value, e: &ActionExpr) -> Result<Value, JkError>
+fn evaluate(runtime: &Runtime, v: &Value, e: &ActionExpr) -> Result<Value, JkError>
 {
     match e {
         &ActionExpr::Integer(i) => Ok(Value::I64(i)),
         &ActionExpr::String(ref s) => Ok(Value::String(s.clone())),
         &ActionExpr::ObjectIndex(ref idx) => evaluate_object_index(v, idx),
+        &ActionExpr::Variable(ref name) => Ok(runtime.var_get(name)),
     }
 }
 
-fn batch_evaluate(v: &Value, expressions: &Vec<ActionExpr>) -> Result<Vec<Value>, JkError>
+fn batch_evaluate(runtime: &Runtime, v: &Value, expressions: &Vec<ActionExpr>) -> Result<Vec<Value>, JkError>
 {
     let mut evector = Vec::new();
     
     for e in expressions {
-        evector.push(try!(evaluate(v, e)));
+        evector.push(try!(evaluate(runtime, v, e)));
     }
 
     return Ok(evector);
 }
 
-fn run_function(v: &Value, func: &Function) -> Result<(), JkError>
+fn run_function(runtime: &mut Runtime, v: &Value, func: &Function) -> Result<(), JkError>
 {
     if let Some(ref proto) = sBuiltins.get(&func.name) {
-        let args = try!(batch_evaluate(v, &func.args));
+        let args = try!(batch_evaluate(runtime, v, &func.args));
         try!((proto.func)(&args));
         return Ok(());
     } else {
@@ -180,10 +205,10 @@ fn run_function(v: &Value, func: &Function) -> Result<(), JkError>
 }
 
 
-fn run_single_action(v: &Value, action: &Vec<Function>) -> Result<(), JkError>
+fn run_single_action(runtime: &mut Runtime, v: &Value, action: &Vec<Function>) -> Result<(), JkError>
 {
     for func in action {
-        try!(run_function(v, func));
+        try!(run_function(runtime, v, func));
     }
 
     return Ok(());
@@ -191,9 +216,12 @@ fn run_single_action(v: &Value, action: &Vec<Function>) -> Result<(), JkError>
 
 fn run_action(value: &Value, action: &Vec<Function>) -> Result<(), JkError>
 {
+    let runtime = &mut Runtime::new();
+    
     match value {
-        &Value::Array(ref vector) => run_array_action(vector, action),
-        _ => run_single_action(value, action),
+        &Value::Array(ref vector) => run_array_action(runtime, vector, action),
+        &Value::Object(ref object) => run_object_action(runtime, object, action),
+        _ => run_single_action(runtime, value, action),
     }
 }
 

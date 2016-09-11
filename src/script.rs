@@ -53,6 +53,7 @@ impl ArraySlice {
 pub enum ActionExpr {
     Integer(i64),
     String(String),
+    Variable(String),
     ObjectIndex(String),
 }
 
@@ -100,10 +101,45 @@ impl fmt::Debug for FunctionPrototype {
     }
 }
 
+// runtime
+pub struct Runtime {
+    variables: BTreeMap<String, Value>,
+}
+
+impl Runtime {
+    pub fn new() -> Runtime
+    {
+        Runtime {
+            variables: BTreeMap::new(),
+        }
+    }
+    
+    pub fn var_get(&self, name: &String) -> Value
+    {
+        match self.variables.get(name) {
+            Some(v) => v.clone(),
+            None => Value::Null,
+        }
+    }
+
+    pub fn var_set(&mut self, name: &String, value: Value)
+    {
+        self.variables.insert(name.clone(), value);
+    }
+
+    pub fn var_delete(&mut self, name: &String)
+    {
+        self.variables.remove(name);
+    }
+}
+
 fn builtin_print(args: &Vec<Value>) -> Result<Value, JkError>
 {
     for a in args {
-        print!("{} ", a);
+        match a {
+            &Value::String(ref s) => print!("{} ", s),
+            _ => print!("{} ", a),
+        }
     }
 
     print!("\n");
