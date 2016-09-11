@@ -14,36 +14,6 @@ mod parse;
 use parse::script;
 use script::*;
 
-// selector convert a json value to another json value
-// action prints records in a json value in tabluar form
-// 
-// To print result = [ {"a": 1, "b": 2, "c": 3 }, {"a": 4, "b": 5, "c": 6 }, {"a": 6, "b": 7, "c": 8}]
-//     for k, v in enumerate(result):
-//         record-print()
-//
-// 
-// record-print a json value
-//
-// 1. Object
-//    record = {"a": 1, "b": 2, "c": 3}
-//    
-//    p .a .b       <<< print r['a'], r['b']
-//
-//    p .values()   <<< print r['a'], r['b'], r['c']
-//
-//    p .keys()     <<< print 'a', 'b', 'c'
-//
-//    p .join(':')  <<< print "'a':r['a']", "'b':r['b']", "'c':r['c']"
-//
-//
-// 2. Array
-//    record = [1, 2, 3, 4]
-//
-//    p .0 .1       <<< print r[0], r[1]
-//    p .values()   <<< print r[0], r[1], r[2], r[3]
-//    p .keys()     <<< print 0, 1, 2, 3
-//    p .join(':')  <<< print 0:r[0], 1:r[1], 2:r[2], 3:r[3]
-//
 
 use std::string::String;
 use std::str;
