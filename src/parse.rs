@@ -523,6 +523,10 @@ fn parse_indexer<'input>(input: &'input str, state: &mut ParseState<'input>,
                          pos: usize) -> RuleResult<()> {
     slice_eq(input, state, pos, ".")
 }
+fn parse_eacher<'input>(input: &'input str, state: &mut ParseState<'input>,
+                        pos: usize) -> RuleResult<()> {
+    slice_eq(input, state, pos, "->")
+}
 fn parse_sint<'input>(input: &'input str, state: &mut ParseState<'input>,
                       pos: usize) -> RuleResult<i64> {
     {
@@ -856,20 +860,12 @@ fn parse_action_separator<'input>(input: &'input str,
 }
 fn parse_selector_section<'input>(input: &'input str,
                                   state: &mut ParseState<'input>, pos: usize)
- -> RuleResult<Vec<Jop>> {
+ -> RuleResult<Vec<Selector>> {
     {
         let mut repeat_pos = pos;
         let mut repeat_value = vec!();
         loop  {
             let pos = repeat_pos;
-            let pos =
-                if repeat_value.len() > 0 {
-                    let sep_res = slice_eq(input, state, pos, ".");
-                    match sep_res {
-                        Matched(newpos, _) => { newpos }
-                        Failed => break ,
-                    }
-                } else { pos };
             let step_res = parse_selector(input, state, pos);
             match step_res {
                 Matched(newpos, value) => {
@@ -883,29 +879,87 @@ fn parse_selector_section<'input>(input: &'input str,
     }
 }
 fn parse_selector<'input>(input: &'input str, state: &mut ParseState<'input>,
-                          pos: usize) -> RuleResult<Jop> {
+                          pos: usize) -> RuleResult<Selector> {
     {
-        let choice_res = parse_array_selector(input, state, pos);
+        let choice_res =
+            {
+                let start_pos = pos;
+                {
+                    let seq_res = parse_indexer(input, state, pos);
+                    match seq_res {
+                        Matched(pos, _) => {
+                            {
+                                let seq_res = parse_sop(input, state, pos);
+                                match seq_res {
+                                    Matched(pos, s) => {
+                                        {
+                                            let match_str =
+                                                &input[start_pos..pos];
+                                            Matched(pos,
+                                                    { Selector::ForSelf(s) })
+                                        }
+                                    }
+                                    Failed => Failed,
+                                }
+                            }
+                        }
+                        Failed => Failed,
+                    }
+                }
+            };
         match choice_res {
             Matched(pos, value) => Matched(pos, value),
-            Failed => parse_object_selector(input, state, pos),
+            Failed => {
+                let start_pos = pos;
+                {
+                    let seq_res = parse_eacher(input, state, pos);
+                    match seq_res {
+                        Matched(pos, _) => {
+                            {
+                                let seq_res = parse_sop(input, state, pos);
+                                match seq_res {
+                                    Matched(pos, s) => {
+                                        {
+                                            let match_str =
+                                                &input[start_pos..pos];
+                                            Matched(pos,
+                                                    { Selector::ForEach(s) })
+                                        }
+                                    }
+                                    Failed => Failed,
+                                }
+                            }
+                        }
+                        Failed => Failed,
+                    }
+                }
+            }
         }
     }
 }
-fn parse_array_selector<'input>(input: &'input str,
-                                state: &mut ParseState<'input>, pos: usize)
- -> RuleResult<Jop> {
+fn parse_sop<'input>(input: &'input str, state: &mut ParseState<'input>,
+                     pos: usize) -> RuleResult<Sop> {
     {
-        let choice_res = parse_array_index_selector(input, state, pos);
+        let choice_res = parse_array_sop(input, state, pos);
         match choice_res {
             Matched(pos, value) => Matched(pos, value),
-            Failed => parse_array_slice_selector(input, state, pos),
+            Failed => parse_object_sop(input, state, pos),
         }
     }
 }
-fn parse_array_index_selector<'input>(input: &'input str,
-                                      state: &mut ParseState<'input>,
-                                      pos: usize) -> RuleResult<Jop> {
+fn parse_array_sop<'input>(input: &'input str, state: &mut ParseState<'input>,
+                           pos: usize) -> RuleResult<Sop> {
+    {
+        let choice_res = parse_array_index_sop(input, state, pos);
+        match choice_res {
+            Matched(pos, value) => Matched(pos, value),
+            Failed => parse_array_slice_sop(input, state, pos),
+        }
+    }
+}
+fn parse_array_index_sop<'input>(input: &'input str,
+                                 state: &mut ParseState<'input>, pos: usize)
+ -> RuleResult<Sop> {
     {
         let start_pos = pos;
         {
@@ -926,7 +980,7 @@ fn parse_array_index_selector<'input>(input: &'input str,
                                                     &input[start_pos..pos];
                                                 Matched(pos,
                                                         {
-                                                            Jop::ArrayIndex(index)
+                                                            Sop::ArrayIndex(index)
                                                         })
                                             }
                                         }
@@ -943,9 +997,9 @@ fn parse_array_index_selector<'input>(input: &'input str,
         }
     }
 }
-fn parse_array_slice_selector<'input>(input: &'input str,
-                                      state: &mut ParseState<'input>,
-                                      pos: usize) -> RuleResult<Jop> {
+fn parse_array_slice_sop<'input>(input: &'input str,
+                                 state: &mut ParseState<'input>, pos: usize)
+ -> RuleResult<Sop> {
     {
         let start_pos = pos;
         {
@@ -997,7 +1051,7 @@ fn parse_array_slice_selector<'input>(input: &'input str,
                                                                             &input[start_pos..pos];
                                                                         Matched(pos,
                                                                                 {
-                                                                                    Jop::ArraySlice(ArraySlice::new(start,
+                                                                                    Sop::ArraySlice(ArraySlice::new(start,
                                                                                                                     end,
                                                                                                                     None))
                                                                                 })
@@ -1025,20 +1079,20 @@ fn parse_array_slice_selector<'input>(input: &'input str,
         }
     }
 }
-fn parse_object_selector<'input>(input: &'input str,
-                                 state: &mut ParseState<'input>, pos: usize)
- -> RuleResult<Jop> {
+fn parse_object_sop<'input>(input: &'input str,
+                            state: &mut ParseState<'input>, pos: usize)
+ -> RuleResult<Sop> {
     {
-        let choice_res = parse_wildcard_object_selector(input, state, pos);
+        let choice_res = parse_wildcard_object_sop(input, state, pos);
         match choice_res {
             Matched(pos, value) => Matched(pos, value),
-            Failed => parse_member_object_selector(input, state, pos),
+            Failed => parse_member_object_sop(input, state, pos),
         }
     }
 }
-fn parse_wildcard_object_selector<'input>(input: &'input str,
-                                          state: &mut ParseState<'input>,
-                                          pos: usize) -> RuleResult<Jop> {
+fn parse_wildcard_object_sop<'input>(input: &'input str,
+                                     state: &mut ParseState<'input>,
+                                     pos: usize) -> RuleResult<Sop> {
     {
         let start_pos = pos;
         {
@@ -1047,8 +1101,7 @@ fn parse_wildcard_object_selector<'input>(input: &'input str,
                 Matched(pos, _) => {
                     {
                         let match_str = &input[start_pos..pos];
-                        Matched(pos,
-                                { Jop::Object(ObjectSelector::Wildcard) })
+                        Matched(pos, { Sop::Object(ObjectIndexer::Wildcard) })
                     }
                 }
                 Failed => Failed,
@@ -1056,9 +1109,9 @@ fn parse_wildcard_object_selector<'input>(input: &'input str,
         }
     }
 }
-fn parse_member_object_selector<'input>(input: &'input str,
-                                        state: &mut ParseState<'input>,
-                                        pos: usize) -> RuleResult<Jop> {
+fn parse_member_object_sop<'input>(input: &'input str,
+                                   state: &mut ParseState<'input>, pos: usize)
+ -> RuleResult<Sop> {
     {
         let start_pos = pos;
         {
@@ -1069,7 +1122,7 @@ fn parse_member_object_selector<'input>(input: &'input str,
                         let match_str = &input[start_pos..pos];
                         Matched(pos,
                                 {
-                                    Jop::Object(ObjectSelector::Exact(match_str.to_string()))
+                                    Sop::Object(ObjectIndexer::Exact(match_str.to_string()))
                                 })
                     }
                 }

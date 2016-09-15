@@ -38,33 +38,63 @@ fn value_error(msg: &str) -> Result<Value, JkError>
     return Err(JkError::Action(String::from(msg)));
 }
 
-fn select_json_array(v: Vec<Value>, query: &Jop) -> Result<Value, JkError>
+fn sop_json_value(value: Value, sop: &Sop) -> Result<Value, JkError>
 {
-    match query {
-        &Jop::ArraySlice(ref slice) => Ok(Value::Array(v[slice.to_range(v.len())].to_vec())),
-        &Jop::ArrayIndex(index) => Ok(v[index as usize].clone()),
+    match value {
+        Value::Array(vector) => sop_json_array(vector, sop),
+        Value::Object(object) => sop_json_object(object, sop),
+        value @ _ => Ok(value.clone()),
+    }
+}
+
+fn sop_json_array(v: Vec<Value>, sop: &Sop) -> Result<Value, JkError>
+{
+    match sop {
+        &Sop::ArraySlice(ref slice) => Ok(Value::Array(v[slice.to_range(v.len())].to_vec())),
+        &Sop::ArrayIndex(index) => Ok(v[index as usize].clone()),
         _ => Err(JkError::Query(String::from("bad array selector")))
     }
 }
 
-fn select_json_object(o: Map<String, Value>, query: &Jop) -> Result<Value, JkError>
+fn sop_json_object(o: Map<String, Value>, sop: &Sop) -> Result<Value, JkError>
 {
-    if let &Jop::Object(ref selector) = query {
-        match selector {
-            &ObjectSelector::Wildcard => Ok(Value::Object(o)),
-            &ObjectSelector::Exact(ref key) => o.get(key).cloned().ok_or(JkError::Query(String::from("missing"))),
+    if let &Sop::Object(ref indexer) = sop {
+        match indexer {
+            &ObjectIndexer::Wildcard => Ok(Value::Object(o)),
+            &ObjectIndexer::Exact(ref key) => o.get(key).cloned().ok_or(JkError::Query(String::from("missing"))),
         }
     } else {
         return Err(JkError::Query(String::from("bad object selector")));
     }
 }
 
-fn select_json_value(node: Value, query: &Jop) -> Result<Value, JkError>
+fn select_json(value: Value, selector: &Selector) -> Result<Value, JkError>
 {
-    match node {
-        Value::Array(vector) => select_json_array(vector, query),
-        Value::Object(object) => select_json_object(object, query),
-        value @ _ => Ok(value.clone()),
+    match selector {
+        &Selector::ForSelf(ref sop) => sop_json_value(value, sop),
+        &Selector::ForEach(ref sop) => {
+            let mut result = Vec::new();
+            
+            match value {
+                Value::Array(vector) => {
+                    for elem in vector {
+                        result.push(try!(sop_json_value(elem, sop)));
+                    }
+
+                    Ok(Value::Array(result))
+                },
+
+                Value::Object(object) => {
+                    for (_, elem_value) in object {
+                        result.push(try!(sop_json_value(elem_value, sop)));
+                    }
+
+                    Ok(Value::Array(result))
+                },
+
+                _ => sop_json_value(value, sop),
+            }
+        },
     }
 }
 
@@ -193,7 +223,7 @@ fn execute<R: io::Read>(script: &Script, reader: &mut R) -> Result<(), JkError>
     let mut json_curr = json_root;
 
     for s in selector {
-        let json_next = try!(select_json_value(json_curr, s));
+        let json_next = try!(select_json(json_curr, s));
         json_curr = json_next;
     }
 

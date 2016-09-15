@@ -29,6 +29,7 @@ int -> i64
     = "0" { 0 + 0 } / [1-9][0-9]* { match_str.parse().unwrap() }
 
 indexer = "."
+eacher = "->"
 
 
 
@@ -60,29 +61,33 @@ mode_separator -> ActionMode
 
 action_separator = ws ";" ws
 
-selector_section -> Vec<Jop>
-                 = selector ** "."
+selector_section -> Vec<Selector>
+                 = selector*
 
-selector -> Jop
-         = array_selector / object_selector
+selector -> Selector
+         = indexer s:sop { Selector::ForSelf(s) } /
+           eacher s:sop { Selector::ForEach(s) }
 
-array_selector -> Jop
-               = array_index_selector / array_slice_selector
+sop -> Sop
+         = array_sop / object_sop
 
-array_index_selector -> Jop
-    = l_square index:sint r_square { Jop::ArrayIndex(index) }
+array_sop -> Sop
+               = array_index_sop / array_slice_sop
+
+array_index_sop -> Sop
+    = l_square index:sint r_square { Sop::ArrayIndex(index) }
     
-array_slice_selector -> Jop
-    = l_square start:sint? colon end:sint? r_square { Jop::ArraySlice(ArraySlice::new(start, end, None)) }
+array_slice_sop -> Sop
+    = l_square start:sint? colon end:sint? r_square { Sop::ArraySlice(ArraySlice::new(start, end, None)) }
 
-object_selector -> Jop
-                = wildcard_object_selector / member_object_selector
+object_sop -> Sop
+                = wildcard_object_sop / member_object_sop
 
-wildcard_object_selector -> Jop
-    = "*" { Jop::Object(ObjectSelector::Wildcard) }
+wildcard_object_sop -> Sop
+    = "*" { Sop::Object(ObjectIndexer::Wildcard) }
 
-member_object_selector -> Jop
-    = object_index_name { Jop::Object(ObjectSelector::Exact(match_str.to_string())) }
+member_object_sop -> Sop
+    = object_index_name { Sop::Object(ObjectIndexer::Exact(match_str.to_string())) }
 
 action_section -> Vec<Function>
                  = action_func ** action_separator

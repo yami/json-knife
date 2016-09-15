@@ -8,7 +8,7 @@ use std::fmt;
 use json::Value;
 
 #[derive(Debug)]
-pub enum ObjectSelector {
+pub enum ObjectIndexer {
     Wildcard,
     Exact(String),
 }
@@ -61,10 +61,16 @@ pub struct Function {
 }
 
 #[derive(Debug)]
-pub enum Jop {
+pub enum Selector {
+    ForSelf(Sop),
+    ForEach(Sop),
+}
+
+#[derive(Debug)]
+pub enum Sop {
     ArraySlice(ArraySlice),
     ArrayIndex(i64),
-    Object(ObjectSelector),
+    Object(ObjectIndexer),
 }
 
 #[derive(Debug)]
@@ -75,7 +81,7 @@ pub enum ActionMode {
 
 #[derive(Debug)]
 pub struct Script {
-    pub selector: Vec<Jop>,
+    pub selector: Vec<Selector>,
     pub mode: ActionMode,
     pub action: Vec<Function>,
 }
