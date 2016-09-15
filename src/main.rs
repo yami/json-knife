@@ -52,7 +52,9 @@ fn sop_json_array(v: Vec<Value>, sop: &Sop) -> Result<Value, JkError>
     match sop {
         &Sop::ArraySlice(ref slice) => Ok(Value::Array(v[slice.to_range(v.len())].to_vec())),
         &Sop::ArrayIndex(index) => Ok(v[index as usize].clone()),
-        _ => Err(JkError::Query(String::from("bad array selector")))
+        
+        // coercing to foreach
+        &Sop::Object(_) => sop_foreach_json_array(v, sop),
     }
 }
 
@@ -68,30 +70,36 @@ fn sop_json_object(o: Map<String, Value>, sop: &Sop) -> Result<Value, JkError>
     }
 }
 
+fn sop_foreach_json_array(vector: Vec<Value>, sop: &Sop) -> Result<Value, JkError>
+{
+    let mut result = Vec::new();
+    
+    for v in vector {
+        result.push(try!(sop_json_value(v, sop)));
+    }
+    
+    return Ok(Value::Array(result));
+}
+
+fn sop_foreach_json_object(object: Map<String, Value>, sop: &Sop) -> Result<Value, JkError>
+{
+    let mut result = Vec::new();
+    
+    for (_, v) in object {
+        result.push(try!(sop_json_value(v, sop)));
+    }
+    
+    return Ok(Value::Array(result));
+}
+
 fn select_json(value: Value, selector: &Selector) -> Result<Value, JkError>
 {
     match selector {
         &Selector::ForSelf(ref sop) => sop_json_value(value, sop),
         &Selector::ForEach(ref sop) => {
-            let mut result = Vec::new();
-            
             match value {
-                Value::Array(vector) => {
-                    for elem in vector {
-                        result.push(try!(sop_json_value(elem, sop)));
-                    }
-
-                    Ok(Value::Array(result))
-                },
-
-                Value::Object(object) => {
-                    for (_, elem_value) in object {
-                        result.push(try!(sop_json_value(elem_value, sop)));
-                    }
-
-                    Ok(Value::Array(result))
-                },
-
+                Value::Array(vector) => sop_foreach_json_array(vector, sop),
+                Value::Object(object) => sop_foreach_json_object(object, sop),
                 _ => sop_json_value(value, sop),
             }
         },
