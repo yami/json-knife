@@ -59,14 +59,30 @@ $ cat store.json
   }                                             
 }                                               
 ```
+To print first book in Json format
+```bash
+# selector is '.store.book.[0]'
+# mode is '@' (ForSelf), meaning just to access current json value
+# action is 'p _v', where
+#  - 'p' is the command for print
+#  - '_v' is the builtin variable for 'current json value'
+$ cat store.json | jk ".store.book.[0] @ p _v"
+{                                     
+  "author": "Nigel Rees",             
+  "category": "reference",            
+  "price": 8.95,                      
+  "title": "Sayings of the Century"   
+}
+```
+
 To print authors of each book:
 ```bash
-# selector is `store.book`
+# selector is '.store.book'
 # mode is '%' (ForEach), meaning for each array element or object key-value pair
 # action is 'p .author' where
 #    - 'p' is the command for print
 #    - '.author' is the argument to p, which is each  book's author.
-$ cat store.json | jk "store.book % p .author"
+$ cat store.json | jk ".store.book % p .author"
 Nigel Rees
 Evelyn Waugh
 Herman Melville
@@ -74,10 +90,10 @@ J. R. R. Tolkien
 ```
 To print all properties for first book
 ```bash
-# selector is 'store.book.[0]', which selects the first book
+# selector is '.store.book.[0]', which selects the first book
 # mode is still 'ForEach'.
 # action is to print each key-value. Note '_k' and '_v' are builtin-variables.
-$ cat store.json | jk "store.book.[0] % p _k _v"
+$ cat store.json | jk ".store.book.[0] % p _k _v"
 author Nigel Rees
 category reference
 price 8.95
@@ -87,7 +103,7 @@ To print the bicyle color:
 ```bash
 # mode is '@', ForSelf, that is not run action over each elements/key-values.
 # Instead, action is run over current sub-json itself.
-$ cat store.json | jk "store.bicycle @ p .color"
+$ cat store.json | jk ".store.bicycle @ p .color"
 red
 ```
 
