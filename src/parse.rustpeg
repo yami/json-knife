@@ -46,13 +46,16 @@ action_literal -> ActionExpr
 action_object_index -> ActionExpr
                     = indexer n:object_index_name { ActionExpr::ObjectIndex(n) }
 
+action_array_index -> ActionExpr
+                   = indexer l_square i:sint r_square { ActionExpr::ArrayIndex(i) }
+
 object_index_name -> String
              = ident / s_string / d_string
 
 
 
-l_square = ws "[" ws
-r_square = ws "]" ws
+l_square = "[" ws
+r_square = ws "]"
 colon = ws ":" ws
 
 mode_separator -> ActionMode
@@ -99,4 +102,4 @@ action_expr_list -> Vec<ActionExpr>
                 = action_expr ** space_separator
 
 action_expr -> ActionExpr
-            = action_literal / action_object_index
+            = action_literal / action_object_index / action_array_index

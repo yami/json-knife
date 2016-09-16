@@ -684,6 +684,57 @@ fn parse_action_object_index<'input>(input: &'input str,
         }
     }
 }
+fn parse_action_array_index<'input>(input: &'input str,
+                                    state: &mut ParseState<'input>,
+                                    pos: usize) -> RuleResult<ActionExpr> {
+    {
+        let start_pos = pos;
+        {
+            let seq_res = parse_indexer(input, state, pos);
+            match seq_res {
+                Matched(pos, _) => {
+                    {
+                        let seq_res = parse_l_square(input, state, pos);
+                        match seq_res {
+                            Matched(pos, _) => {
+                                {
+                                    let seq_res =
+                                        parse_sint(input, state, pos);
+                                    match seq_res {
+                                        Matched(pos, i) => {
+                                            {
+                                                let seq_res =
+                                                    parse_r_square(input,
+                                                                   state,
+                                                                   pos);
+                                                match seq_res {
+                                                    Matched(pos, _) => {
+                                                        {
+                                                            let match_str =
+                                                                &input[start_pos..pos];
+                                                            Matched(pos,
+                                                                    {
+                                                                        ActionExpr::ArrayIndex(i)
+                                                                    })
+                                                        }
+                                                    }
+                                                    Failed => Failed,
+                                                }
+                                            }
+                                        }
+                                        Failed => Failed,
+                                    }
+                                }
+                            }
+                            Failed => Failed,
+                        }
+                    }
+                }
+                Failed => Failed,
+            }
+        }
+    }
+}
 fn parse_object_index_name<'input>(input: &'input str,
                                    state: &mut ParseState<'input>, pos: usize)
  -> RuleResult<String> {
@@ -704,17 +755,9 @@ fn parse_object_index_name<'input>(input: &'input str,
 fn parse_l_square<'input>(input: &'input str, state: &mut ParseState<'input>,
                           pos: usize) -> RuleResult<()> {
     {
-        let seq_res = parse_ws(input, state, pos);
+        let seq_res = slice_eq(input, state, pos, "[");
         match seq_res {
-            Matched(pos, _) => {
-                {
-                    let seq_res = slice_eq(input, state, pos, "[");
-                    match seq_res {
-                        Matched(pos, _) => { parse_ws(input, state, pos) }
-                        Failed => Failed,
-                    }
-                }
-            }
+            Matched(pos, _) => { parse_ws(input, state, pos) }
             Failed => Failed,
         }
     }
@@ -724,15 +767,7 @@ fn parse_r_square<'input>(input: &'input str, state: &mut ParseState<'input>,
     {
         let seq_res = parse_ws(input, state, pos);
         match seq_res {
-            Matched(pos, _) => {
-                {
-                    let seq_res = slice_eq(input, state, pos, "]");
-                    match seq_res {
-                        Matched(pos, _) => { parse_ws(input, state, pos) }
-                        Failed => Failed,
-                    }
-                }
-            }
+            Matched(pos, _) => { slice_eq(input, state, pos, "]") }
             Failed => Failed,
         }
     }
@@ -1237,7 +1272,13 @@ fn parse_action_expr<'input>(input: &'input str,
         let choice_res = parse_action_literal(input, state, pos);
         match choice_res {
             Matched(pos, value) => Matched(pos, value),
-            Failed => parse_action_object_index(input, state, pos),
+            Failed => {
+                let choice_res = parse_action_object_index(input, state, pos);
+                match choice_res {
+                    Matched(pos, value) => Matched(pos, value),
+                    Failed => parse_action_array_index(input, state, pos),
+                }
+            }
         }
     }
 }

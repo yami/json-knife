@@ -52,6 +52,7 @@ pub enum ActionExpr {
     String(String),
     Variable(String),
     ObjectIndex(String),
+    ArrayIndex(i64),
 }
 
 #[derive(Debug)]
@@ -144,7 +145,10 @@ fn builtin_print(args: &Vec<Value>) -> Result<Value, JkError>
     for a in args {
         match a {
             &Value::String(ref s) => print!("{} ", s),
-            _ => print!("{} ", a),
+            _ => {
+                let pretty = try!(json::to_string_pretty(a).map_err(JkError::Parse));
+                print!("{} ", pretty);
+            },
         }
     }
 

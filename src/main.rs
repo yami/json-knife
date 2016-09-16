@@ -159,6 +159,19 @@ fn evaluate_object_index(v: &Value, index: &String) -> Result<Value, JkError>
     }
 }
 
+fn evaluate_array_index(v: &Value, index: i64) -> Result<Value, JkError>
+{
+    if let &Value::Array(ref vector) = v {
+        if let Some(evalue) = vector.get(index as usize) {
+            return Ok(evalue.clone());
+        } else {
+            return value_error("out of range");
+        }
+    } else {
+        return value_error("not an array");
+    }
+}
+
 fn evaluate(runtime: &Runtime, v: &Value, e: &ActionExpr) -> Result<Value, JkError>
 {
     match e {
@@ -166,6 +179,7 @@ fn evaluate(runtime: &Runtime, v: &Value, e: &ActionExpr) -> Result<Value, JkErr
         &ActionExpr::String(ref s) => Ok(Value::String(s.clone())),
         &ActionExpr::ObjectIndex(ref idx) => evaluate_object_index(v, idx),
         &ActionExpr::Variable(ref name) => Ok(runtime.var_get(name)),
+        &ActionExpr::ArrayIndex(idx) => evaluate_array_index(v, idx),
     }
 }
 
@@ -194,9 +208,14 @@ fn run_function(runtime: &mut Runtime, v: &Value, func: &Function) -> Result<(),
 
 fn run_single_action(runtime: &mut Runtime, v: &Value, action: &Vec<Function>) -> Result<(), JkError>
 {
+    let var_value = &String::from("_v");
+    runtime.var_set(var_value, v.clone());
+    
     for func in action {
         try!(run_function(runtime, v, func));
     }
+
+    runtime.var_delete(var_value);
 
     return Ok(());
 }
